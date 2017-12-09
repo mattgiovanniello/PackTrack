@@ -10,6 +10,8 @@ import UIKit
 import LocalAuthentication
 import Alamofire
 
+
+
 class ViewController: UIViewController {
     
     
@@ -22,21 +24,29 @@ class ViewController: UIViewController {
     var password = ""
     var error: NSError?
     var resultCode: Int?
+    var loggedInUser: String?
+    var tutorialViewed: String?
     
     var defaultsData = UserDefaults.standard
-
     
     
     override func viewDidLoad() {
         super.viewDidLoad()
 
+        
         username = defaultsData.string(forKey: "username") ?? String()
 
         if username != "" {
             usernameField.text = username
             touchIDAuthenticate()
         }
-//        loginButtonPressed(UIButton.init())
+    }
+    
+    override func viewDidAppear(_ animated: Bool) {
+        tutorialViewed = defaultsData.string(forKey: "tutorialViewed") ?? String()
+        if tutorialViewed != "yes" {
+            performSegue(withIdentifier: "SegueToTutorial", sender: nil)
+        }
     }
     
     
@@ -51,22 +61,9 @@ class ViewController: UIViewController {
         if username == "" || password == "" {
             self.showAlert(title: "Empty Field", message: "Please enter your username and password.")
         }
-//        var request = URLRequest(url:URL(string:"https://api.bc.edu/a/")!)
-//        request.httpMethod = "POST"
         
         let params: Parameters = ["username":username, "password":password]
-//        request.httpBody = try? JSONSerialization.data(withJSONObject: params, options: [])
-//        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-//        let task=URLSession.shared.dataTask(with: request) { (data:Data?, response:URLResponse?, error:Error?) in
-//            self.result = String(data:data!, encoding:.utf8)!
-//            print(self.result)
-//            if self.result == "Successful bind!" {
-//                self.resultCode = 1
-//            } else {
-//                self.resultCode = 0
-//            }
-//        }
+
         
         
         let headers: HTTPHeaders = [
@@ -76,17 +73,18 @@ class ViewController: UIViewController {
             self.checkResults(of: response.result.value!)
             
         }
-        
-//        checkResults()
-//        task.resume()
+
         
     }
     
+
     
     func checkResults(of result: String) {
         if result == "Successful bind!" {
             saveDefaultsData()
-            performSegue(withIdentifier: "MainScreen", sender: "")
+            
+            
+            performSegue(withIdentifier: "MainScreen", sender: nil)
             
         }
         else if result == "Bind failed" {
@@ -103,32 +101,28 @@ class ViewController: UIViewController {
         let context = LAContext()
         var error: NSError?
         
+        user.userName = username
+
+        
         if context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) {
-            let reason = "Identify yourself!"
+            let reason = "View packages for \(username)@bc.edu"
             
             context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason) {
                 [unowned self] success, authenticationError in
                 
                 DispatchQueue.main.async {
                     if success {
-                        self.performSegue(withIdentifier: "MainScreen", sender: "")
-                    } else {
-                        let ac = UIAlertController(title: "Authentication failed", message: "Sorry!", preferredStyle: .alert)
-                        ac.addAction(UIAlertAction(title: "OK", style: .default))
-                        self.present(ac, animated: true)
+                        self.performSegue(withIdentifier: "MainScreen", sender: nil)
+                    }
                     }
                 }
-            }
+            
         } else {
-            let ac = UIAlertController(title: "Touch ID not available", message: "Your device is not configured for Touch ID.", preferredStyle: .alert)
+            let ac = UIAlertController(title: "Touch ID Not Available", message: "Your device is not configured for Touch ID.", preferredStyle: .alert)
             ac.addAction(UIAlertAction(title: "OK", style: .default))
             present(ac, animated: true)
         }
     }
-    
-    
-    
-    
     
     
     
@@ -140,14 +134,15 @@ class ViewController: UIViewController {
         present(alertController, animated: true, completion: nil)
     }
     
+
     
     @IBAction func loginButtonPressed(_ sender: UIButton) {
         
         username = usernameField.text!
         password = passwordField.text!
-        
+        user.userName = username
+
         checkCredentials()
         
     }
 }
-

@@ -18,20 +18,21 @@ class PackageListViewController: UIViewController {
     
     var packageNamesArray = [String]()
     var packagesArray = [String]()
-    
+
     
     override func viewDidLoad() {
         super.viewDidLoad()
         tableView.delegate = self
         tableView.dataSource = self
-        packageNamesArray = defaultsData.stringArray(forKey: "packageNamesArray") ?? [String]()
-        packagesArray = defaultsData.stringArray(forKey: "packagesArray") ?? [String]()
+        print(user.userName!)
+        packageNamesArray = defaultsData.stringArray(forKey: "packageNamesArray-\(user.userName!)") ?? [String]()
+        packagesArray = defaultsData.stringArray(forKey: "packagesArray-\(user.userName!)") ?? [String]()
     }
 
     
     func saveDefaultsData() {
-        defaultsData.set(packageNamesArray, forKey: "packageNamesArray")
-        defaultsData.set(packagesArray, forKey: "packagesArray")
+        defaultsData.set(packageNamesArray, forKey: "packageNamesArray-\(user.userName!)")
+        defaultsData.set(packagesArray, forKey: "packagesArray-\(user.userName!)")
     }
    
     

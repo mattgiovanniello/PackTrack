@@ -17,12 +17,10 @@ class PackageDetailsViewController: UIViewController {
     
     @IBOutlet weak var carrierField: UILabel!
     
-    
     @IBOutlet weak var imageStatusBar: UIImageView!
     @IBOutlet weak var imageOnItsWay: UIImageView!
     @IBOutlet weak var imageEnRouteToBCMailServices: UIImageView!
     @IBOutlet weak var imageMailRoomProcessing: UIImageView!
-    @IBOutlet weak var imageReadyForPickup: UIImageView!
     
     @IBOutlet weak var step1HeaderText: UILabel!
     @IBOutlet weak var step1DetailsText: UILabel!
@@ -32,8 +30,7 @@ class PackageDetailsViewController: UIViewController {
     @IBOutlet weak var step3HeaderText: UILabel!
     
     @IBOutlet weak var step3DetailsText: UILabel!
-    @IBOutlet weak var step4HeaderText: UILabel!
-    @IBOutlet weak var step4DetailsText: UILabel!
+
     
     @IBOutlet weak var internalPackageIDField: UILabel!
     @IBOutlet weak var internalPackageLocationField: UILabel!
@@ -41,12 +38,16 @@ class PackageDetailsViewController: UIViewController {
     
     @IBOutlet weak var centerStatusImage: UIImageView!
     @IBOutlet weak var centerStatusLabel: UILabel!
-    @IBOutlet weak var centerStatusDetailsLabel: UILabel!
+    @IBOutlet weak var centerStatusDetailsLabel: UITextView!
+    @IBOutlet weak var pickedUpButton: UIButton!
+    
+    
+    var defaultsData = UserDefaults.standard
     
     var packageItem: String?
     var packageName: String?
     var carrier: String?
-    var packageStatus: String?
+    var trackingNumberStatus: String?
     var statusCode: Int?
     var deliveryDate: String?
     var mailRoomStatus: String?
@@ -66,20 +67,36 @@ class PackageDetailsViewController: UIViewController {
         self.navigationItem.title = packageName
         trackingNumberField.text = packageItem
         
-        getPackageShippingCarrier {
-            print("Success - getPackageShippingCarrier completed")
-            self.getPackageStatusFromCarrier {
-                print("Success - getPackageStatusFromCarrier completed")
-                self.getPackageStatusFromBC {
-                    print("Success - getPackageStatusFromBC completed")
-                    self.getPackageLocation {
-                        print("Success - getPackageLocation completed")
-                        self.updateUserInterface()
+        mailRoomStatus = defaultsData.string(forKey: "packageStatus-\(packageItem!)") ?? String()
+        internalPackageLocation = defaultsData.string(forKey: "packageLocation-\(packageItem!)") ?? String()
+        
+        if mailRoomStatus == "Picked Up" {
+            updateUserInterface()
+        } else if mailRoomStatus == "Ready for Pickup" {
+            updateUserInterface()
+        } else {
+            getPackageShippingCarrier {
+                print("Success - getPackageShippingCarrier completed")
+                self.getPackageStatusFromCarrier {
+                    print("Success - getPackageStatusFromCarrier completed")
+                    self.getPackageStatusFromBC {
+                        print("Success - getPackageStatusFromBC completed")
+                        self.getPackageLocation {
+                            print("Success - getPackageLocation completed")
+                            self.updateUserInterface()
+                        }
                     }
                 }
             }
         }
     }
+    
+    
+    func saveDefaultsData() {
+        defaultsData.set(mailRoomStatus, forKey: "packageStatus-\(packageItem!)")
+    }
+    
+    
     
     
     func setUpActivityIndicator() {
@@ -134,28 +151,50 @@ class PackageDetailsViewController: UIViewController {
         activityIndicator.startAnimating()
         UIApplication.shared.beginIgnoringInteractionEvents()
         
-        // get the package status from the carrier
         
-        let trackingURL = "https://shipit-api.herokuapp.com/api/carriers/" + "\(carrierField.text!)" + "/" + "\(self.trackingNumberField.text!)"
         
-        Alamofire.request(trackingURL).responseJSON { response in
-            switch response.result {
-            case .success(let value):
-                let json = JSON(value)
-                self.packageStatus = json["activities"][0]["details"].stringValue
-                self.statusCode = json["status"].intValue
-                self.deliveryDate = json["eta"].stringValue
-                print(self.deliveryDate!)
-                
-                self.packageStatusText.text = self.packageStatus
-                
-            case .failure(let error):
-                print("ERROR: \(error) failed to get package status from url \(trackingURL)")
+        // this currently only works for USPS -- so if it's not USPS, just mark trackingNumberStatus as "En Route"
+        
+        
+        if carrierField.text == "usps" {
+            // get the package status from the carrier
+            
+            let trackingURL = "https://shipit-api.herokuapp.com/api/carriers/" + "\(carrierField.text!)" + "/" + "\(self.trackingNumberField.text!)"
+            
+            Alamofire.request(trackingURL).responseJSON { response in
+                switch response.result {
+                case .success(let value):
+                    let json = JSON(value)
+                    self.trackingNumberStatus = json["activities"][0]["details"].stringValue
+                    self.statusCode = json["status"].intValue
+                    self.deliveryDate = json["eta"].stringValue
+                    print(self.deliveryDate!)
+                    
+                    
+                case .failure(let error):
+                    print("ERROR: \(error) failed to get package status from url \(trackingURL)")
+                }
             }
-            self.activityIndicator.stopAnimating()
-            UIApplication.shared.endIgnoringInteractionEvents()
-            completed()
+        } else {
+            
+            switch self.carrier {
+            case "usps"?:
+                self.carrier = "USPS"
+            case "ups"?:
+                self.carrier = "UPS"
+            case "fedex"?:
+                self.carrier = "FedEx"
+            default:
+                self.carrier = self.carrier?.capitalized
+                
+                self.trackingNumberStatus = "En Route from \(self.carrier!)"
+            }
+            
+            self.packageStatusText.text = self.trackingNumberStatus
         }
+        self.activityIndicator.stopAnimating()
+        UIApplication.shared.endIgnoringInteractionEvents()
+        completed()
     }
     
     
@@ -183,10 +222,10 @@ class PackageDetailsViewController: UIViewController {
             case .success( _):
                 
                 // extract the code from the webpage with the internal package ID
-                let jsonArray = response.result.value?.slice(from: "AssetData: ", to: ",")
-                
-                self.internalPackageID = String(jsonArray!.suffix(5))
-                self.internalPackageIDField.text = self.internalPackageID!
+                if let checkInternalPackageID = (response.result.value?.slice(from: "AssetData: [{\"Id\":", to: ",")) {
+                    self.internalPackageID = checkInternalPackageID
+                    self.internalPackageIDField.text = self.internalPackageID!
+                }
                 
                 
             case .failure(let error):
@@ -222,7 +261,8 @@ class PackageDetailsViewController: UIViewController {
                 self.internalPackageLocation = response.result.value?.slice(from: "Current Location:         <span>", to: "</span>")
                 
                 if self.internalPackageLocation != nil {
-                self.internalPackageLocationField.text = self.internalPackageLocation!
+                    self.internalPackageLocationField.text = self.internalPackageLocation!
+
                 }
                 
                 
@@ -240,17 +280,19 @@ class PackageDetailsViewController: UIViewController {
     // Check results of whether package is in BC's system
     
     func checkResults(of result: String) {
-        //    print(result)
         
         if result.contains("Picked Up") {
             mailRoomStatus = "Picked Up"
+            saveDefaultsData()
+        } else if result.contains("Ready for Pickup") {
+            mailRoomStatus = "Ready for Pickup"
+            saveDefaultsData()
         } else if result.contains("Received") {
             mailRoomStatus = "Received"
         } else {
             mailRoomStatus = "Not Received"
         }
     }
-    
     
     func animateText(itemToAnimate: UILabel) {
         UIView.animate(withDuration: 0.5, animations: {
@@ -261,7 +303,25 @@ class PackageDetailsViewController: UIViewController {
     }
     
     
+    func animateDetailsText(itemToAnimate: UITextView) {
+        UIView.animate(withDuration: 0.5, animations: {
+            itemToAnimate.alpha = 0
+            self.view.addSubview(itemToAnimate)
+            itemToAnimate.alpha = 1.0
+        })
+    }
+    
+    
     func animateImage(itemToAnimate: UIImageView) {
+        itemToAnimate.alpha = 0
+        UIView.animate(withDuration: 0.5, delay: 0.0, options: [], animations: {
+            itemToAnimate.alpha = 1.0
+        }
+            , completion: nil )
+    }
+    
+    
+    func animateButton(itemToAnimate: UIButton) {
         itemToAnimate.alpha = 0
         UIView.animate(withDuration: 0.5, delay: 0.0, options: [], animations: {
             itemToAnimate.alpha = 1.0
@@ -282,6 +342,7 @@ class PackageDetailsViewController: UIViewController {
     }
     
     
+    
     func halfAnimateImage(itemToAnimate: UIImageView) {
         itemToAnimate.alpha = 0
         UIView.animate(withDuration: 0.5, delay: 0.0, options: [], animations: {
@@ -296,7 +357,29 @@ class PackageDetailsViewController: UIViewController {
     
     func updateUserInterface() {
         
-        if mailRoomStatus == "Picked Up" {
+        
+        if mailRoomStatus == "Ready for Pickup" {
+            centerStatusImage.isHidden = false
+            centerStatusLabel.isHidden = false
+            centerStatusDetailsLabel.isHidden = false
+            pickedUpButton.isHidden = false
+
+            
+            // show Ready for Pickup message
+            animateText(itemToAnimate: centerStatusLabel)
+            animateDetailsText(itemToAnimate: centerStatusDetailsLabel)
+            animateImage(itemToAnimate: centerStatusImage)
+            animateButton(itemToAnimate: pickedUpButton)
+            
+            centerStatusImage.image = UIImage(named: "ready-for-pickup")
+            centerStatusLabel.text = "Ready for Pickup"
+        
+            centerStatusDetailsLabel.text = "Shelf: \(internalPackageLocation!)"
+            defaultsData.set(internalPackageLocation, forKey: "packageLocation-\(packageItem!)")
+
+
+            
+        } else if mailRoomStatus == "Picked Up" {
             centerStatusImage.isHidden = false
             centerStatusLabel.isHidden = false
             
@@ -319,6 +402,7 @@ class PackageDetailsViewController: UIViewController {
             
             // show Unknown Status message
             animateText(itemToAnimate: centerStatusLabel)
+            animateDetailsText(itemToAnimate: centerStatusDetailsLabel)
             animateImage(itemToAnimate: centerStatusImage)
             
             centerStatusImage.image = UIImage(named: "unknown-status")
@@ -362,14 +446,10 @@ class PackageDetailsViewController: UIViewController {
                 halfAnimateText(itemToAnimate: step3DetailsText)
                 halfAnimateImage(itemToAnimate: imageMailRoomProcessing)
                 
-                halfAnimateText(itemToAnimate: step4HeaderText)
-                halfAnimateText(itemToAnimate: step4DetailsText)
-                halfAnimateImage(itemToAnimate: imageReadyForPickup)
-                
-                
+
                 let easyDate = deliveryDate?.prefix(10)
                 step1HeaderText.text = "On Its Way"
-                step1DetailsText.text = "\(packageStatus!)\nExpected Delivery Date: \(easyDate!)"
+                step1DetailsText.text = "\(trackingNumberStatus!)\nExpected Delivery Date: \(easyDate!)"
                 
                 
             }
@@ -391,15 +471,12 @@ class PackageDetailsViewController: UIViewController {
                 halfAnimateText(itemToAnimate: step3HeaderText)
                 halfAnimateText(itemToAnimate: step3DetailsText)
                 halfAnimateImage(itemToAnimate: imageMailRoomProcessing)
-                
-                halfAnimateText(itemToAnimate: step4HeaderText)
-                halfAnimateText(itemToAnimate: step4DetailsText)
-                halfAnimateImage(itemToAnimate: imageReadyForPickup)
+            
                 
                 
                 
                 step1HeaderText.text = "On Its Way"
-                step1DetailsText.text = "\(packageStatus!)\n"
+                step1DetailsText.text = "\(trackingNumberStatus!)\n"
                 
                 
             }
@@ -407,8 +484,8 @@ class PackageDetailsViewController: UIViewController {
                 
                 
                 step1HeaderText.text = "On Its Way"
-                step1DetailsText.text = "Delivered\n "
-
+                step1DetailsText.text = ""
+                
                 
             }
             
@@ -417,39 +494,9 @@ class PackageDetailsViewController: UIViewController {
             imageMailRoomProcessing.isHidden = false
             step3HeaderText.isHidden = false
             step3DetailsText.isHidden = false
-            
-            // unhide step 4 assets
-            imageReadyForPickup.isHidden = false
-            step4HeaderText.isHidden = false
-            step4DetailsText.isHidden = false
 
             
             
-            if mailRoomStatus == "Ready for Pickup" {
-                
-                // fade in Step 4
-                
-                animateText(itemToAnimate: step4HeaderText)
-                animateText(itemToAnimate: step4DetailsText)
-                animateImage(itemToAnimate: imageReadyForPickup)
-                
-                // gray out others
-                
-                halfAnimateText(itemToAnimate: step1HeaderText)
-                halfAnimateText(itemToAnimate: step1DetailsText)
-                halfAnimateImage(itemToAnimate: imageOnItsWay)
-                
-                halfAnimateText(itemToAnimate: step2HeaderText)
-                halfAnimateText(itemToAnimate: step2DetailsText)
-                halfAnimateImage(itemToAnimate: imageEnRouteToBCMailServices)
-                
-                halfAnimateText(itemToAnimate: step3HeaderText)
-                halfAnimateText(itemToAnimate: step3DetailsText)
-                halfAnimateImage(itemToAnimate: imageMailRoomProcessing)
-                
-                step4DetailsText.text = "Shelf: \(internalPackageLocationField.text!)"
-                
-            }
             
             if mailRoomStatus == "Received" {
                 
@@ -469,16 +516,14 @@ class PackageDetailsViewController: UIViewController {
                 halfAnimateText(itemToAnimate: step2DetailsText)
                 halfAnimateImage(itemToAnimate: imageEnRouteToBCMailServices)
                 
-                halfAnimateText(itemToAnimate: step4HeaderText)
-                halfAnimateText(itemToAnimate: step4DetailsText)
-                halfAnimateImage(itemToAnimate: imageReadyForPickup)
+
                 
                 
                 step3DetailsText.text = "Your package will be ready soon."
                 
             }
             
-            if mailRoomStatus == "Not Received" {
+            if carrier == "usps" && mailRoomStatus == "Not Received" {
                 
                 // fade in Step 2
                 
@@ -496,16 +541,50 @@ class PackageDetailsViewController: UIViewController {
                 halfAnimateText(itemToAnimate: step3DetailsText)
                 halfAnimateImage(itemToAnimate: imageMailRoomProcessing)
                 
-                halfAnimateText(itemToAnimate: step4HeaderText)
-                halfAnimateText(itemToAnimate: step4DetailsText)
-                halfAnimateImage(itemToAnimate: imageReadyForPickup)
                 
+                
+                
+            }
+            
+            if carrier != "usps" && mailRoomStatus == "Not Received" {
+                print("On its way, not via USPS")
+                // fade in Step 1
+                
+                animateText(itemToAnimate: step1HeaderText)
+                animateText(itemToAnimate: step1DetailsText)
+                animateImage(itemToAnimate: imageOnItsWay)
+                
+                // gray out others
+                
+                halfAnimateText(itemToAnimate: step2HeaderText)
+                halfAnimateText(itemToAnimate: step2DetailsText)
+                halfAnimateImage(itemToAnimate: imageEnRouteToBCMailServices)
+                
+                halfAnimateText(itemToAnimate: step3HeaderText)
+                halfAnimateText(itemToAnimate: step3DetailsText)
+                halfAnimateImage(itemToAnimate: imageMailRoomProcessing)
+
+                
+                
+                step1HeaderText.text = "On Its Way"
+                step1DetailsText.text = "Shipped via \(carrier!)\n"
+                step2DetailsText.isHidden = true
                 
             }
         }
     }
+    
+    
+    @IBAction func pickedUpButtonPressed(_ sender: UIButton) {
+        mailRoomStatus = "Picked Up"
+        centerStatusDetailsLabel.isHidden = true
+        pickedUpButton.isHidden = true
+        saveDefaultsData()
+        updateUserInterface()
+    }
+    
+    
 }
-
 
 extension String {
     
