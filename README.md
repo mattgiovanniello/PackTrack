@@ -25,6 +25,20 @@ Once your package is Ready for Pickup, easily access the mailroom location and s
 
 &nbsp;
 
+<h2>Privacy Policy</h2>
+
+PackTrack respects your privacy. Tracking numbers, package names, and details of a package's location and status are stored locally on a user's device and not transmitted to external PackTrack servers. Tracking numbers and package names are not associated with a user's account. No personally-identifiable information about a user is collected or stored by the PackTrack application.
+
+Authentication of a user's account uses Boston College IT's API and is subject to the university's Privacy Policy accessible at https://www.bc.edu/offices/policies/universitypolicies.html
+
+PackTrack uses the ShipIt API to fetch the shipping carrier, status, and location of a package. For more information, visit https://www.npmjs.com/package/shipit
+
+Certain PackTrack features use a shipping carrier's website and public API to provide details of a package. These services are separately governed by the company's respective Privacy Policy.
+
+PackTrack is indepdently operated from, and is not affiliated with, Boston College. While BC Mail Services supports the efforts of PackTrack, no endorsement or guarantee of ongoing functionality is implied.
+
+&nbsp;
+
 <h2>Contact Info</h2>
 
 Please reach out via the app or directly by email (giovanmc@bc.edu) with any questions, feature requests, or bug reports!
